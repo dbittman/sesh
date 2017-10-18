@@ -1,0 +1,35 @@
+What's this, another useless project?
+
+	That's right.
+
+
+What's this one about?
+
+	Networking. I needed a class project. So I'll use the same trick
+	I always use: let's do something dumb by tricking programs via
+	LD_PRELOAD.
+
+	So, like, apps on my phone do a bad job of switching over to WiFi.
+	Instead, what if I had a library that I could shove into a process
+	which would allow it to reconnect to a server when it gets a signal?
+	That'd be pretty cool.
+
+
+Does it work?
+
+    Well, kinda. It's more a proof of concept. There's a lot of hacks
+	involving pthreads and signals that are Bad Ideas, along with a pretty
+	severe limitation in that the server can't fork... Really, I've only
+	tested it with netcat. But I expect that with some extra (read: a lot
+	more) work, it could actually work on ssh. But it would be very
+	insecure.
+
+
+What's the point?
+
+    Like I said, I needed a class project for networking. But hey, this is
+	kinda fun! I'm pretty fond of the "close and dup a new TCP socket
+	out from under the main thread before it notices anything change".
+	It kinda feels like the golden idol at the start of the first Indiana
+	Jones movie.
+
