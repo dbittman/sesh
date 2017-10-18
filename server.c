@@ -16,10 +16,11 @@ struct state {
 	int fd;
 	char buffer[128];
 	size_t bpos;
-} cstate[120];
+} cstate[4];
 
 void close_client(struct state *cs)
 {
+	fprintf(stderr, "closing client!\n");
 	close(cs->fd);
 	cs->ww = cs->wr = 0;
 	cs->bpos = 0;
@@ -75,7 +76,6 @@ void handle_client(int cn, struct pollfd *fd)
 		cs->wr = 1;
 	else
 		cs->wr = 0;
-	fprintf(stderr, "client state: %d %d\n", cs->wr, cs->ww);
 }
 
 int main()
@@ -95,33 +95,33 @@ int main()
 
 	socklen_t clientlen = sizeof(clientaddr);
 
-	struct pollfd fds[121];
-	for(int i=0;i<120;i++) cstate[i].fd = -1;
+	struct pollfd fds[5];
+	for(int i=0;i<4;i++) cstate[i].fd = -1;
 	int num_clients = 0;
 	while(1) {
-		for(int i=0;i<120;i++) {
+		for(int i=0;i<4;i++) {
 			fds[i].events = POLLERR | POLLHUP;
 			if(cstate[i].ww) fds[i].events |= POLLOUT;
 			if(cstate[i].wr) fds[i].events |= POLLIN;
 			fds[i].fd = cstate[i].fd;
 		}
-		fds[120].fd = sockfd;
-		fds[120].events = POLLIN;
+		fds[4].fd = sockfd;
+		fds[4].events = POLLIN;
 
-		int r = poll(fds, 121, -1);
+		int r = poll(fds, 5, -1);
 		if(r <= 0) {
 			break;
 		}
-		for(int i=0;i<120;i++) {
+		for(int i=0;i<4;i++) {
 			if(fds[i].revents) {
 				handle_client(i, &fds[i]);
 			}
 		}
-		if(fds[120].revents && num_clients < 120) {
+		if(fds[4].revents && num_clients < 4) {
 			int cl = accept(sockfd, (struct sockaddr *)&clientaddr, &clientlen);
 			int fl = fcntl(cl, F_GETFL);
 			fcntl(cl, F_SETFL, fl | O_NONBLOCK);
-			for(int i=0;i<120;i++) {
+			for(int i=0;i<4;i++) {
 				if(cstate[i].fd == -1) {
 					cstate[i].fd = cl;
 					cstate[i].wr = 1;

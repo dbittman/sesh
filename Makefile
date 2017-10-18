@@ -6,7 +6,7 @@ clean:
 CFLAGS=-Wall -Wextra -Og -g -std=gnu11 -MD
 
 client: client.c libsession.so
-	$(CC) $(CFLAGS) -o $@ $< #./libsession.so
+	$(CC) $(CFLAGS) -o $@ $< ./libsession.so
 
 server: server.c libsession.so
 	$(CC) $(CFLAGS) -o $@ $< ./libsession.so

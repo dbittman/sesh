@@ -15,39 +15,35 @@ int main(int argc, char **argv)
 		reconn = 1;
 	}
 
-	if(reconn) {
+	int sockfd;
+	if(reconn && 0) {
 		int ss = socket(AF_INET, SOCK_STREAM, 0);
-
 		struct hostent *server = gethostbyname("localhost");
 		struct sockaddr_in serveraddr;
 		memset(&serveraddr, 0, sizeof(serveraddr));
 		serveraddr.sin_family = AF_INET;
 		memcpy((char *)&serveraddr.sin_addr.s_addr, server->h_addr, server->h_length);
 		serveraddr.sin_port = htons(9001);
-
 		if(connect(ss, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) == -1) {
 			perror("reconnect");
 			exit(1);
 		}
+		sockfd = ss;
+	} else {
 
-		write(ss, "YO\n", 3);
+		sockfd = socket(AF_INET, SOCK_STREAM, 0);
+		struct hostent *server = gethostbyname("localhost");
+		struct sockaddr_in serveraddr;
+		memset(&serveraddr, 0, sizeof(serveraddr));
+		serveraddr.sin_family = AF_INET;
+		memcpy((char *)&serveraddr.sin_addr.s_addr, server->h_addr, server->h_length);
+		serveraddr.sin_port = htons(1234);
 
-		close(ss);
+		if(connect(sockfd, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) == -1) {
+			perror("connect");
+			exit(1);
+		}
 	}
-
-	int sockfd = socket(AF_INET, SOCK_STREAM, 0);
-	struct hostent *server = gethostbyname("localhost");
-	struct sockaddr_in serveraddr;
-	memset(&serveraddr, 0, sizeof(serveraddr));
-	serveraddr.sin_family = AF_INET;
-	memcpy((char *)&serveraddr.sin_addr.s_addr, server->h_addr, server->h_length);
-	serveraddr.sin_port = htons(1234);
-
-	if(connect(sockfd, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) == -1) {
-		perror("connect");
-		exit(1);
-	}
-
 	while(1) {
 		char *buf = NULL;
 		size_t bl = 0;
