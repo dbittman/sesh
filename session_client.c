@@ -15,12 +15,6 @@
 #include <errno.h>
 #include <pthread.h>
 
-/* TODO:
- *   - exchange session data instead of the sleep
- *   - support multiple things instead of just one on port 9001 (shared daemon w/ shmem?)
- *   - follow forks to inject into child process a sesh_main thread.
- */
-
 static int (*accept_real)(int, struct sockaddr *, socklen_t *) = NULL;
 static int (*bind_real)(int, const struct sockaddr *, socklen_t) = NULL;
 static int (*connect_real)(int, const struct sockaddr *, socklen_t) = NULL;
@@ -57,11 +51,7 @@ int connect(int fd, const struct sockaddr *addr, socklen_t len)
 		fprintf(stderr, "client seshid got %s\n", buffer);
 		close(ss);
 	}
-	int fl = fcntl(fd, F_GETFL);
-	//fcntl(fd, F_SETFL, fl & ~O_NONBLOCK);
 	int r = connect_real(fd, addr, len);
-	//fcntl(fd, F_SETFL, fl);
-	perror("CONNECT_REAL");
 	if(seshid) {
 		fprintf(stderr, "cl sending seshid %d %d\n", r, fd);
 		dprintf(fd, "%s\n", seshid);
@@ -101,12 +91,10 @@ static void _handle_sig_reconn(int sig)
 	size_t blen = 0;
 	FILE *peer = fdopen(ss, "r+");
 	getline(&buffer, &blen, peer);
-	printf("GOT: %s\n", buffer);
 	dprintf(ss, "%s\n", seshid);
-
-
 	close(connsock);
 	dup2(ss, connsock);
+	close(ss);
 }
 
 __attribute__((constructor)) static void __init_session(void)
