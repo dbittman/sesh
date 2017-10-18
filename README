@@ -33,3 +33,29 @@ What's the point?
 	It kinda feels like the golden idol at the start of the first Indiana
 	Jones movie.
 
+
+How does it work?
+
+	Both the server and the client have their networking functions
+	interposed. They create a session when a TCP connection is established.
+	When the client wishes to reconnect (without having disconnected, maybe
+	it moved to a different network or something), it connects to a special
+	port on the server (9001), and negotiates that the session should do a
+	reconnect. If this is accepted, the server will the ACK, and replace
+	the old connection's file descriptor with this new one. There is a
+	thread running to handle connections to that port on the server, and it
+	replaces the appropriate file descriptor before the main thread can
+	figure out what's going on (it suspends the thread to do this).
+	The client does a similar thing (but it's actually easier since it
+	already in a signal handler).
+
+Future plans?
+
+	None, it's a class project.
+
+	Okay, it could be improved. It would require a fair amount of reworking
+	to make it actually secure and to make it work better (support forking
+	servers, multithreaded, session control, etc...). But I don't have time
+	:)
+
+
