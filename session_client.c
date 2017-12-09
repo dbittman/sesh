@@ -24,9 +24,38 @@ static struct sockaddr connaddr;
 static socklen_t connlen;
 static char *seshid = NULL;
 
+#include <time.h>
+static long timespec_nano(struct timespec *t)
+{
+	return t->tv_nsec + t->tv_sec*1000000000;
+}
+
+static void timespec_diff(struct timespec *start, struct timespec *stop,
+                   struct timespec *result)
+{
+    if ((stop->tv_nsec - start->tv_nsec) < 0) {
+        result->tv_sec = stop->tv_sec - start->tv_sec - 1;
+        result->tv_nsec = stop->tv_nsec - start->tv_nsec + 1000000000;
+    } else {
+        result->tv_sec = stop->tv_sec - start->tv_sec;
+        result->tv_nsec = stop->tv_nsec - start->tv_nsec;
+    }
+
+    return;
+}
+
+static long timespec_diff_nano(struct timespec *start, struct timespec *end)
+{
+	struct timespec diff;
+	timespec_diff(start, end, &diff);
+	return timespec_nano(&diff);
+}
+
 int connect(int fd, const struct sockaddr *addr, socklen_t len)
 {
 	if(addr->sa_family == AF_INET) {
+		struct timespec start, end, diff;
+		clock_gettime(CLOCK_MONOTONIC, &start);
 		connsock = fd;
 		memcpy(&connaddr, addr, len);
 		connlen = len;
@@ -48,8 +77,11 @@ int connect(int fd, const struct sockaddr *addr, socklen_t len)
 		FILE *peer = fdopen(ss, "r+");
 		getline(&buffer, &blen, peer);
 		seshid = buffer;
-		fprintf(stderr, "client seshid got %s\n", buffer);
+	//	fprintf(stderr, "client seshid got %s\n", buffer);
 		close(ss);
+		clock_gettime(CLOCK_MONOTONIC, &end);
+		timespec_diff(&start, &end, &diff);
+		fprintf(stderr, "BENCH client connect time: %ld\n", timespec_nano(&diff));
 	}
 	int r = connect_real(fd, addr, len);
 	if(seshid) {
@@ -75,6 +107,8 @@ static void _handle_sig_reconn(int sig)
 
 	fprintf(stderr, "Reconnecting via signal\n");
 
+	struct timespec start, end;
+	clock_gettime(CLOCK_MONOTONIC, &start);
 	int ss = socket(AF_INET, SOCK_STREAM, 0);
 	if(ss == -1) perror("socket");
 	struct sockaddr serveraddr;
@@ -94,6 +128,8 @@ static void _handle_sig_reconn(int sig)
 	dprintf(ss, "%s\n", seshid);
 	dup2(ss, connsock);
 	close(ss);
+	clock_gettime(CLOCK_MONOTONIC, &end);
+	fprintf(stderr, "BENCH reconnect client time: %ld\n", timespec_diff_nano(&start, &end));
 }
 
 __attribute__((constructor)) static void __init_session(void)

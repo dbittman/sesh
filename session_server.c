@@ -14,7 +14,32 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <pthread.h>
+#include <time.h>
+static long timespec_nano(struct timespec *t)
+{
+	return t->tv_nsec + t->tv_sec*1000000000;
+}
 
+static void timespec_diff(struct timespec *start, struct timespec *stop,
+                   struct timespec *result)
+{
+    if ((stop->tv_nsec - start->tv_nsec) < 0) {
+        result->tv_sec = stop->tv_sec - start->tv_sec - 1;
+        result->tv_nsec = stop->tv_nsec - start->tv_nsec + 1000000000;
+    } else {
+        result->tv_sec = stop->tv_sec - start->tv_sec;
+        result->tv_nsec = stop->tv_nsec - start->tv_nsec;
+    }
+
+    return;
+}
+
+static long timespec_diff_nano(struct timespec *start, struct timespec *end)
+{
+	struct timespec diff;
+	timespec_diff(start, end, &diff);
+	return timespec_nano(&diff);
+}
 static int (*accept_real)(int, struct sockaddr *, socklen_t *) = NULL;
 static int (*bind_real)(int, const struct sockaddr *, socklen_t) = NULL;
 static int (*connect_real)(int, const struct sockaddr *, socklen_t) = NULL;
@@ -111,16 +136,20 @@ int accept(int fd, struct sockaddr *addr, socklen_t *len)
 {
 	int cl = accept_real(fd, addr, len);
 	
+	struct timespec start, end;
+	clock_gettime(CLOCK_MONOTONIC, &start);
 	char *buffer = NULL;
 	size_t blen = 0;
 	FILE *peer = fdopen(cl, "r+");
 	getline(&buffer, &blen, peer);
 	struct session *s = session_find(buffer);
-	fprintf(stderr, "accept: got session %s: %p\n", buffer, s);
+//	fprintf(stderr, "accept: got session %s: %p\n", buffer, s);
 	if(s) {
-		fprintf(stderr, "accept: assign fd=%d\n", cl);
+//		fprintf(stderr, "accept: assign fd=%d\n", cl);
 		s->fd = cl;
 	}
+	clock_gettime(CLOCK_MONOTONIC, &end);
+	fprintf(stderr, "BENCH server accept time: %ld\n", timespec_diff_nano(&start, &end));
 
 	return cl;
 }
@@ -150,11 +179,13 @@ static void reconnect(int cl)
 		fprintf(stderr, "sending seshid %s\n", s->sid);
 		dprintf(cl, "%s", s->sid);
 	} else if(!strcmp(buffer, "SESSION RECONNECT\n")) {
+		struct timespec start, end;
+		clock_gettime(CLOCK_MONOTONIC, &start);
 		pthread_kill(mainthrd, SIGUSR1);
 		dprintf(cl, "ACK\n");
-		fprintf(stderr, "searching for session...\n");
+	//	fprintf(stderr, "searching for session...\n");
 		getline(&buffer, &blen, peer);
-		fprintf(stderr, "Got:: %s\n", buffer);
+	//	fprintf(stderr, "Got:: %s\n", buffer);
 		struct session *s = session_find(buffer);
 		if(s == NULL) {
 			fprintf(stderr, "could not find: %s\n", buffer);
@@ -166,6 +197,8 @@ static void reconnect(int cl)
 			perror("dup2");
 		}
 		pthread_kill(mainthrd, SIGUSR2);
+		clock_gettime(CLOCK_MONOTONIC, &end);
+		fprintf(stderr, "BENCH server reconnect time: %ld\n", timespec_diff_nano(&start, &end));
 	}
 }
 
