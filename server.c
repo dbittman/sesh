@@ -99,6 +99,7 @@ int main()
 	for(int i=0;i<4;i++) cstate[i].fd = -1;
 	int num_clients = 0;
 	while(1) {
+		errno=0;
 		for(int i=0;i<4;i++) {
 			fds[i].events = POLLERR | POLLHUP;
 			if(cstate[i].ww) fds[i].events |= POLLOUT;
@@ -110,6 +111,7 @@ int main()
 
 		int r = poll(fds, 5, -1);
 		if(r <= 0) {
+			if(errno == EINTR) continue;
 			break;
 		}
 		for(int i=0;i<4;i++) {

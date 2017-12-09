@@ -118,6 +118,7 @@ int accept(int fd, struct sockaddr *addr, socklen_t *len)
 	struct session *s = session_find(buffer);
 	fprintf(stderr, "accept: got session %s: %p\n", buffer, s);
 	if(s) {
+		fprintf(stderr, "accept: assign fd=%d\n", cl);
 		s->fd = cl;
 	}
 
@@ -161,8 +162,9 @@ static void reconnect(int cl)
 			return;
 		}
 		fprintf(stderr, "reconnecting session %d\n", s->fd);
-		close(s->fd);
-		dup2(cl, s->fd);
+		if(dup2(cl, s->fd) == -1) {
+			perror("dup2");
+		}
 		pthread_kill(mainthrd, SIGUSR2);
 	}
 }

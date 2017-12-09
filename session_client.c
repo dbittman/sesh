@@ -92,7 +92,6 @@ static void _handle_sig_reconn(int sig)
 	FILE *peer = fdopen(ss, "r+");
 	getline(&buffer, &blen, peer);
 	dprintf(ss, "%s\n", seshid);
-	close(connsock);
 	dup2(ss, connsock);
 	close(ss);
 }
