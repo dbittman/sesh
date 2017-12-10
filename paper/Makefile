@@ -21,7 +21,7 @@ $(OUTPUT): $(MAIN) $(GENFIGS) Makefile
 	@echo "[latexmk] $@"
 	@tput setaf 12
 	@set -o pipefail;\
-	OUT=$$(latexmk -pdflatex="$(PDFLATEX)" -g -pdf -M -MF $(DEPS) $< |& sed -n -e '/^!/,+1p' -e 's/Latexmk: //p' -e '/  Citation/p' | sed -e 's/^/[latexmk] /g' | grep -v 'This is');\
+	OUT=$$(latexmk -pdflatex="$(PDFLATEX)" -pdf -M -MF $(DEPS) $< |& sed -n -e '/^!/,+1p' -e 's/Latexmk: //p' -e '/  Citation/p' | sed -e 's/^/[latexmk] /g' | grep -v 'This is');\
 		S=$${PIPESTATUS[0]};\
 		if [[ "$$S" == "0" ]]; then \
 			V=12;\

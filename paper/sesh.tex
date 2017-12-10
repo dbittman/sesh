@@ -1,22 +1,20 @@
 \documentclass[twocolumn,10pt]{article}
 \usepackage[margin=1in]{geometry}
 \usepackage[T1]{fontenc}
-\usepackage[sort]{natbib}
+\usepackage[sort,numbers]{natbib}
 \usepackage{graphicx}
 \usepackage{siunitx}
 \usepackage{amsmath,xspace}
 \usepackage[backgroundcolor=yellow]{todonotes}
 \usepackage[utf8]{inputenc}
 \usepackage{bibentry}
-\usepackage{hyperref}
 \usepackage{float}
 \usepackage[ttscale=.875]{libertine}
 \usepackage{listings}
 \usepackage{libertinust1math}
 \usepackage{mdframed}
-\usepackage[format=plain,
-            labelfont={bf,it},
-            textfont=it]{caption}
+\usepackage[format=plain,labelfont={bf,it},textfont=it]{caption}
+\usepackage[breaklinks]{hyperref}
 
 \author{Daniel Bittman \\ dbittman@ucsc.edu}
 
@@ -73,7 +71,7 @@ can be found at \url{https://github.com/dbittman/sesh}.
 	\centering
 	\includegraphics[width=70mm]{fig/time_recon}
 	\caption{Stuff}
-	\label{fig:est}
+	\label{fig:recon}
 \end{figure}
 
 
@@ -81,15 +79,44 @@ can be found at \url{https://github.com/dbittman/sesh}.
 
 \section{Related Work}
 
-reparenting
+Providing ``mobile IP'' services is common in cell networks, since users are
+largely truly mobile and so need a built-in method to have changing IP addresses
+are part of the network design~\cite{ltemob,mobileip,Kurose}. While this largely
+solves the problem for cell networks, it does not provide interoperability for
+cell-phones that reconnect to WiFi networks, which do not have the same
+functionality. This limitation is indicative of a larger limitation---the
+network must support the requirements of a mobile-IP infrastructure. This
+contrary to arguments in~\cite{Saltzer}, because it requires support through the
+whole stack. Furthermore, these solutions often require support by client
+applications and potentially servers (which may or may not understand the
+complexities of mobile-IP services, resulting in errant behavior).
+OpenFlow~\cite{McKeown} also
+provides features for mobility with flows, but also requires extensive support
+in the hardware and network.
 
-"just avoid the problem"l
+Other projects and papers, such as Chandrashekar's Service Oriented
+Internet~\cite{chandrashekar2003service} and Saif's Service-Oriented Network
+Sockets~\cite{Saif} discuss designs for, essentially, session layer network designs.
+While \texttt{sesh} would eventually provide more session-like features than
+simple reconnect and session tokens, that work is outside the scope of a class
+project. However, much of the work in the aforementioned papers is extremely
+relevant to the future of a library such as \texttt{sesh}.
 
+A session layer protocol that explicitly provides reconnection is
+\textit{fived}~\cite{wasptr-15-01}. \textit{Fived} runs as a daemon on both
+endpoints, through which clients and servers can establish sessions.
+\textit{Fived} provides a number of services that \texttt{sesh} does not yet,
+but should in the future, support, such as service enumeration. However,
+\textit{fived} incurs additional overhead by running as a daemon, whereas
+\texttt{sesh} runs as libraries that interpose library calls, improving
+performance.
 
-mosh: mobile sh, specific app
-
-autossh: just restarts ssh, doesn't maintain session (still need screen)
-
+Numerous projects focus on problem-avoidance for reconnecting dead TCP
+connections~\cite{mosh,autossh,screen,tmux}. Solutions range from implementing
+sessions on the server (which require forethought and explicit use of tools), to
+reparenting processes to continue running on hangup (which is not a session), to
+reestablishing a new connection automatically (which is also not a session). All
+these solutions lack the usability and transparency of true sessions.
 
 \section{Conclusion}
 
@@ -105,8 +132,8 @@ autossh: just restarts ssh, doesn't maintain session (still need screen)
 
 
 
-\bibliographystyle{plain}
 \bibliography{sesh}
+\bibliographystyle{plainnat}
 
 \end{document}
 
