@@ -10,10 +10,13 @@
 \usepackage{bibentry}
 \usepackage{hyperref}
 \usepackage{float}
-\usepackage{libertine}
+\usepackage[ttscale=.875]{libertine}
 \usepackage{listings}
 \usepackage{libertinust1math}
 \usepackage{mdframed}
+\usepackage[format=plain,
+            labelfont={bf,it},
+            textfont=it]{caption}
 
 \author{Daniel Bittman \\ dbittman@ucsc.edu}
 
@@ -31,7 +34,9 @@
 \begin{document}
 \biolinum
 \maketitle
-\libertine 
+\libertine
+\renewcommand\ttdefault{lmtt}
+
 \section*{Abstract}
 
 

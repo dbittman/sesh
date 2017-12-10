@@ -44,10 +44,10 @@ fig/time_est.eps: establish.txt
 
 fig/time_recon.eps: reconn.txt
 
-figdir:
+fig:
 	@mkdir -p fig
 
-fig/%.eps: %.py figdir
+fig/%.eps: %.py fig
 	@tput setaf 15
 	@echo "[python]  $@"
 	@tput setaf 11
@@ -55,7 +55,7 @@ fig/%.eps: %.py figdir
 	@tput setaf 15
 
 establish.txt: client_data server_data Makefile
-	@echo "[pilot]  $@"
+	@echo "[pilot]   $@"
 	@OUT=$$(grep 'BENCH client con' client_data | awk '{print $$NF}' | pilot analyze --preset=normal -);\
 		(grep mean <<< $$OUT | awk '{print $$NF}' | tr '\n' ' ';\
 		grep CI <<< $$OUT | awk '{print $$NF}') > establish.txt
@@ -64,7 +64,7 @@ establish.txt: client_data server_data Makefile
 		grep CI <<< $$OUT | awk '{print $$NF}') >> establish.txt
 
 reconn.txt: client_data server_data Makefile
-	@echo "[pilot]  $@"
+	@echo "[pilot]   $@"
 	@OUT=$$(grep 'BENCH re' client_data | awk '{print $$NF}' | pilot analyze --preset=normal -);\
 		(grep mean <<< $$OUT | awk '{print $$NF}' | tr '\n' ' ';\
 		grep CI <<< $$OUT | awk '{print $$NF}') > reconn.txt
@@ -76,5 +76,6 @@ reconn.txt: client_data server_data Makefile
 clean:
 	-rm $(DEPS) $(GENFIGS) $(OUTPUT) *.bbl *.aux *.blg *.fdb_latexmk *.fls *.log *.out
 	-rm establish.txt reconn.txt
+
 -include $(DEPS)
 
