@@ -28,6 +28,7 @@
 \newcommand{\etal}{\emph{et~al.}\xspace}
 \newcommand{\unix}{\textsc{Unix}\xspace}
 \newcommand{\sesh}{\texttt{sesh}\xspace}
+\newcommand{\Sesh}{\texttt{Sesh}\xspace}
 
 \begin{document}
 \biolinum
@@ -45,22 +46,204 @@ can be found at \url{https://github.com/dbittman/sesh}.
 
 \section{Introduction}
 
+Mobile networking
 
+Cell phones use 2 different networks that dont interoperate
 
+Implementing mobile IP is hard
 
+Need something that does end-to-end
+
+session daemons help, but require additional deployment
+
+\sesh is transparent and provides reconnection services
 
 \section{Design}
 
+The model we choose for \sesh is \textit{mobile-client, stationary-server}---the
+client is allowed to move arbitrarily, where move means change networks, IP
+addresses, etc. The server, however, maintains a constant location (IP address).
+And load-balancing that happens for servers must occur before the use of \sesh,
+since it cannot handle moving sessions across machines.
+
+The core design choice for \sesh was to keep it as transparent as possible and
+in order for legacy programs to function with the added functionality. This
+means that we allow \textit{no} modifications to applications. Unfortunately,
+there are ways applications could be written that break \sesh (such as calling
+system calls directly or not handling signals properly). However, reasonably and
+correctly written programs should work.
+
+\newcommand{\clientso}{\texttt{client.so}\xspace}
+\newcommand{\serverso}{\texttt{server.so}\xspace}
+
+\Sesh compiles to two shared libraries: \texttt{libsession\_client.so}
+(hereafter \clientso) and \texttt{libsession\_server.so} (hereafter \serverso).
+Programs may link to these libraries, or they may be \texttt{LD\_PRELOAD}'d into
+the process' address spaces. The libraries have some initialization code that
+runs before \texttt{main()}, and they interpose on certain socket-related system
+calls in order to do some additional work when applications call
+\texttt{accept}, \texttt{connect}, etc. The code for \serverso and \clientso is
+referred to as the session-client and the session-server, respectively. The
+application code for the client and the server is referred to as the real client
+and real server.
+
+\paragraph{Server Operation}
+When the server begins, the \serverso initialization code creates a new TCP
+server on the \textit{session management port}. This port is used by clients to
+send commands and interact with the session services.
+When a client asks to
+establish a new session, they send a \texttt{SESSION ESTABLISH} packet to the
+sessions management port. The server then generates a session token (32-bytes of
+random characters) which it sends back to the client. When the client (the real
+client, not the interposed code in \clientso) connects to the server (the real
+server port, not the session management port), the session token is first
+exchanged to register which TCP connection between the real client and server is
+associated with which session. This code runs whenever \texttt{accept} returns
+in the server, and uses the new TCP connection to exchange the token. Finally,
+the session-server returns the file descriptor for the real \texttt{accept} call to the
+real server so it can continue as normal without seeing the behind-the-scenes
+interactions.
 
 
-\section{Implementation}
+\paragraph{Client Operation}
+The session-client's initialization code registers a signal handler for
+\texttt{SIGUSR2} that will be used to trigger reconnection attempts. It
+overrides the \texttt{connect} function in order to first create and establish a
+connection to the session management port for the server it is trying to connect
+to. If it cannot connect to the session management port, it gives up and the
+client operates as normal (allowing session-enabled clients to connect to
+servers that do not support the session functionality). Once connected, the
+session-client sends the \texttt{SESSION ESTABLISH} packet and receives a
+session token in return, which it records. The \texttt{connect} call then proceeds as
+normal. After the connection is established between the real client and the real
+server, the session-client code exchanges the session token before
+\texttt{connect} returns, finalizing the session establishment.
 
 
+\paragraph{Reconnection Operation}
+To trigger a reconnection attempt, the user sends the \texttt{SIGUSR2} signal to
+the client. The method for sending this signal is unspecified by \sesh, since it
+is out of scope to generate reconnection attempts automatically. The signal can
+either be sent manually, or another daemon on the machine could monitor the
+system for network changes, and send the signal to registered clients
+automatically.
+
+The reconnection process involves replacing existing file descriptors with new
+ones (discussed in more detail in section~\ref{sec:impl}) in both the client and
+the server in order to change the (now broken after the client moves networks)
+TCP connection between them into a new one. The process is intricate, and is
+shown graphically in figure~\ref{fig:recproc}. The operation does one thing:
+replace a single, dead, TCP connection with a new one without the real client or
+the real server noticing the change.
+
+\begin{figure}
+	\centering
+	\includegraphics[width=90mm]{fig/reconn_diag}
+	\caption{The reconnection process. The client moves networks, causing its
+	address to change, which breaks the TCP connection. The client and server
+	negotiate a new connection via the session management port, which is then
+	used to replace the old connection file descriptors, allowing transparent
+	reconnection.}
+	\label{fig:recproc}
+\end{figure}
+
+Upon receiving the signal, the client opens a new connection to the session
+management port. It sends a \texttt{SESSION RECONNECT} packet, and waits for an
+acknowledgement from the server. If acknowledged, it sends the server the
+session token, followed by replacing the file descriptor that referred to the
+now-dead TCP connection that is being reestablished. Meanwhile, upon receiving
+the session token, the server does a similar operation to replace its end of the
+now-dead TCP connection with a new one. The new connection that they replace the
+old one with is the TCP connection that was established via the session
+management port. The effect is that the server and client have a new,
+functioning TCP connection between them without them noticing that it replaced a
+dead one. Interaction can now continue unimpeded.
+
+\section{Implementation Details}
+\label{sec:impl}
+
+The design is somewhat straight forward, with the basic idea being to replace an
+old, dead TCP connection with a new one by manipulating file descriptors.
+However, there are a number of design details that are worth discussing.
+
+\paragraph{Replacing File Descriptors}
+The core functionality of reconnection is done by replacing the file descriptor
+that refers to the old TCP connection with one that refers to a new connection.
+This can be accomplished by the \texttt{dup2} systemcall, which duplicates a
+given file descriptor into another provided file descriptor, closing the target
+if it is open. This is exactly what we want, however there are some details.
+Firstly, this code must run in isolation. For the client, this is simple---we
+are already triggering reconnection by signal handling, so while we are handling
+the signal to interact with the session-server, we can also use \texttt{dup2} to
+replace our end of the dead TCP connection once the session token has been
+exchanged. Since we are running in a signal handler, no other code can execute
+(assuming single-threaded clients). Once our signal handler completes, the file
+descriptor will be replaced and the client can continue normally.
+
+However, if the application was executing inside a system call, the default
+action is to return from the system call with \texttt{EINTR} (interrupted system
+call). This may be unexpected for applications, so we specify the
+\texttt{SA\_RESTART} flag for the signal handler to that system calls are
+restarted instead.
+
+
+\paragraph{Server Session Support}
+The server is quite a bit more complicated for two reasons: it does not have a
+convenient linearizable operation that signals it that a reconnect is happening,
+and it must listen on multiple ports. The real server listens on its normal port
+for new TCP connections, but the session-server must also accept new connections
+on the session management port. To facilitate this, the session-server starts a
+background thread that listens on that port. When it receives a \texttt{SESSION
+RECONNECT} packet and successfully exchanges a session token, it stops the real
+server's main thread before replacing the file descriptor for the old connection
+with the new one in the same was as described above (with \texttt{dup2}).
+Finally, it resumes the real server's main thread.
+
+Stopping a restarting the main thread is done by having it register two signal
+handlers during initialization, \texttt{SIGUSR1} and \texttt{SIGUSR2}. When the
+server receives \texttt{SIGUSR1}, its handler masks all signals except
+\texttt{SIGUSR2} and calls \texttt{sigsuspend}, allowing it to wait to be woken
+back up. The session management thread then does its work before signaling the
+main thread with \texttt{SIGUSR2}. The signal handlers are specified to be
+\texttt{SA\_RESTART}, for the same reason described above.
+
+A final detail for both the client and the server is that they should mask all
+signals (except \texttt{SIGUSR2}) in the case of the server so that while they
+are executing critical code (replacing file descriptors), they do not get
+interrupted. Additionally, the masks will allow the signals to be delivered
+normally after the reconnection operation, in case the application needs a
+particular signal. The session-server gets this functionality easily by masking
+all signals in the session management thread, forcing all signals to be
+delivered to the main thread, which only masks signals while it is suspended.
+Additionally, the signals that are used by the session code may be used
+by the applications as well. However, the session code must not allow the
+application to override its signal handlers, lest it break its functionality.
+Thus, the session code overrides the \texttt{sigaction} library call as well and
+records attempts to register new signal handlers by the application. Then, when
+a signal is delivered, the session code can execute the code it needs to execute
+before finally delivering the signal to the application.
 
 \section{Microbenchmarks}
 
+The two primary operations supported by \sesh are session establishment and
+session reconnection. Each operation is initiated by the client and has a
+portion completed by the client that is synchronous with the algorithm used by
+the server. That is, the client initiates an operation, does some work, notifies
+the server, and waits for an \texttt{ack} message. As such, we expect the client
+operations to take strictly longer than the server operations. This is
+beneficial, since we prefer to make the clients wait longer than the server
+because servers are often multiplexed and cannot tolerate longer interruptions
+of service.
 
-\begin{figure}
+Experiments were done on a Linux machine using the loopback network
+interface on an Intel Ivybridge i5 processor. To measure the results, I used
+\texttt{LD\_PRELOAD} to inject the libraries into \texttt{netcat} before
+instructing it to reconnect 2000 times. The process of establishing a connection
+was scripted, and also run 2000 times. Results were analyzed using the Pilot
+statistical analysis program~\cite{pilot}, and the error bars in the graphs
+represent 95\% confidence intervals.
+
+\begin{figure}[!htb]
 	\centering
 	\includegraphics[width=70mm]{fig/time_est}
 	\caption{Latency for establishing a TCP connection using \sesh. The time
@@ -69,7 +252,19 @@ can be found at \url{https://github.com/dbittman/sesh}.
 	\label{fig:est}
 \end{figure}
 
-\begin{figure}
+Figure~\ref{fig:est} shows the latency for session establishment. The extra
+variability in the client's latency is explained by the synchronous nature of
+the protocol---the client's latency is influenced by network latency. The
+server, on the other hand, performs only a small number of operations to
+allocate and record the session, and generate a random token (the prototype uses
+the built-in C library random functions). The client must also record the token,
+and it must create and establish a TCP connection to the session management
+port, whereas the server is already listening and so has less overhead in
+setting up the extra socket.
+The latency of establishment is well within network latency magnitudes, making
+it a tolerable overhead (especially since it is an uncommon operation).
+
+\begin{figure}[!htb]
 	\centering
 	\includegraphics[width=70mm]{fig/time_recon}
 	\caption{Latency for reconnecting with a new TCP connection between a client
@@ -77,7 +272,15 @@ can be found at \url{https://github.com/dbittman/sesh}.
 	\label{fig:recon}
 \end{figure}
 
-
+Figure~\ref{fig:recon} describes the reconnection latency. Again, the client's
+latency is influenced by network latency for the same reasons, and is similar to
+the session establishment latency for all the reasons listed above. However, the
+server has a significant amount of additional work it must do, some of which is
+asynchronous with the client. This means that it takes much longer to reconnect
+than to establish, but it does not affect the client's latency as much. The
+numbers are still within normal network latency for the use-cases we expect for
+\sesh, meaning the delays are tolerable. Finally, the server's latency is more
+variable since it involves two threads signaling each other.
 
 
 \section{Related Work}
@@ -120,6 +323,16 @@ sessions on the server (which require forethought and explicit use of tools), to
 reparenting processes to continue running on hangup (which is not a session), to
 reestablishing a new connection automatically (which is also not a session). All
 these solutions lack the usability and transparency of true sessions.
+
+\section{Future Work}
+
+Mobile server
+
+Better security
+
+forking servers
+
+service discovery
 
 \section{Conclusion}
 
