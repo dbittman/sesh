@@ -63,14 +63,17 @@ can be found at \url{https://github.com/dbittman/sesh}.
 \begin{figure}
 	\centering
 	\includegraphics[width=70mm]{fig/time_est}
-	\caption{Stuff}
+	\caption{Latency for establishing a TCP connection using \sesh. The time
+	represents the additional overhead of the session functionality over that of
+	a normal TCP connection establishment.}
 	\label{fig:est}
 \end{figure}
 
 \begin{figure}
 	\centering
 	\includegraphics[width=70mm]{fig/time_recon}
-	\caption{Stuff}
+	\caption{Latency for reconnecting with a new TCP connection between a client
+	and a server with a previously established session.}
 	\label{fig:recon}
 \end{figure}
 
@@ -97,18 +100,18 @@ in the hardware and network.
 Other projects and papers, such as Chandrashekar's Service Oriented
 Internet~\cite{chandrashekar2003service} and Saif's Service-Oriented Network
 Sockets~\cite{Saif} discuss designs for, essentially, session layer network designs.
-While \texttt{sesh} would eventually provide more session-like features than
+While \sesh would eventually provide more session-like features than
 simple reconnect and session tokens, that work is outside the scope of a class
 project. However, much of the work in the aforementioned papers is extremely
-relevant to the future of a library such as \texttt{sesh}.
+relevant to the future of a library such as \sesh.
 
 A session layer protocol that explicitly provides reconnection is
 \textit{fived}~\cite{wasptr-15-01}. \textit{Fived} runs as a daemon on both
 endpoints, through which clients and servers can establish sessions.
-\textit{Fived} provides a number of services that \texttt{sesh} does not yet,
+\textit{Fived} provides a number of services that \sesh does not yet,
 but should in the future, support, such as service enumeration. However,
 \textit{fived} incurs additional overhead by running as a daemon, whereas
-\texttt{sesh} runs as libraries that interpose library calls, improving
+\sesh runs as libraries that interpose library calls, improving
 performance.
 
 Numerous projects focus on problem-avoidance for reconnecting dead TCP
