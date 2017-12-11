@@ -276,18 +276,18 @@ that refers to the old TCP connection with one that refers to a new connection.
 This can be accomplished by the \texttt{dup2} systemcall, which duplicates a
 given file descriptor into another provided file descriptor, closing the target
 if it is open. This is exactly what we want, however there are some details.
-Firstly, this code must run in isolation. For the client, this is simple---we
-are already triggering reconnection by signal handling, so while we are handling
+Firstly, this code must run in isolation. For the client, this is simple---it's
+already triggering reconnection by signal handling, so while it's handling
 the signal to interact with the session-server, we can also use \texttt{dup2} to
-replace our end of the dead TCP connection once the session token has been
-exchanged. Since we are running in a signal handler, no other code can execute
-(assuming single-threaded clients). Once our signal handler completes, the file
+replace the client's end of the dead TCP connection once the session token has been
+exchanged. Since it's running in a signal handler, no other code can execute
+(assuming single-threaded clients). Once the signal handler completes, the file
 descriptor will be replaced and the client can continue normally.
 
 However, if the application was executing inside a system call, the default
 action is to return from the system call with \texttt{EINTR} (interrupted system
 call). This may be unexpected for applications, so we specify the
-\texttt{SA\_RESTART} flag for the signal handler to that system calls are
+\texttt{SA\_RESTART} flag for the signal handler so that system calls are
 restarted instead. An added benefit of restarting system calls is that system
 calls that were started with the old, dead TCP connection will use the new TCP
 connection. This is because the file descriptor \textit{number} has not changed,
@@ -297,9 +297,12 @@ only the underlying file description object in the kernel.
 \paragraph{Server Session Support}
 The server is quite a bit more complicated for two reasons: it does not have a
 convenient linearizable operation that signals it that a reconnect is happening,
-and it must listen on multiple ports. The real server listens on its normal port
-for new TCP connections, but the session-server must also accept new connections
-on the session management port. To facilitate this, the session-server starts a
+and it must listen on multiple ports.
+The real server multiplexes listening for connections and serving existing ones
+using standard I/O multiplexing techniques,
+but the session-server must also accept new connections
+on the session management port and it must be transparent to the server's
+operation. To facilitate this, the session-server starts a
 background thread that listens on that port. When it receives a \texttt{SESSION
 RECONNECT} packet and successfully exchanges a session token, it stops the real
 server's main thread before replacing the file descriptor for the old connection
@@ -307,7 +310,9 @@ with the new one in the same was as described above (with \texttt{dup2}).
 Finally, it resumes the real server's main thread.
 
 Stopping a restarting the main thread is done by having it register two signal
-handlers during initialization, \texttt{SIGUSR1} and \texttt{SIGUSR2}. When the
+handlers during initialization, \texttt{SIGUSR1} and
+\texttt{SIGUSR2}\footnote{We cannot use \texttt{SIGSTOP} since this stops the
+whole process.}. When the
 server receives \texttt{SIGUSR1}, its handler masks all signals except
 \texttt{SIGUSR2} and calls \texttt{sigsuspend}, allowing it to wait to be woken
 back up. The session management thread then does its work before signaling the
@@ -315,9 +320,9 @@ main thread with \texttt{SIGUSR2}. The signal handlers are specified to be
 \texttt{SA\_RESTART}, for the same reason described above.
 
 A final detail for both the client and the server is that they should mask all
-signals (except \texttt{SIGUSR2}) in the case of the server so that while they
+signals (except \texttt{SIGUSR2} in the case of the server) so that while they
 are executing critical code (replacing file descriptors), they do not get
-interrupted. Additionally, the masks will allow the signals to be delivered
+interrupted. Additionally, the masks will allow the any pending signals to be delivered
 normally after the reconnection operation, in case the application needs a
 particular signal. The session-server gets this functionality easily by masking
 all signals in the session management thread, forcing all signals to be
@@ -386,19 +391,24 @@ server has a significant amount of additional work it must do, some of which is
 asynchronous with the client. This means that it takes much longer to reconnect
 than to establish, but it does not affect the client's latency as much. The
 numbers are still within normal network latency for the use-cases we expect for
-\sesh, meaning the delays are tolerable. Finally, the server's latency is more
-variable since it involves two threads signaling each other.
+\sesh, meaning the delays are tolerable. Finally, the server's latency is
+slightly more variable since it involves two threads signaling each other.
 
+I did not explicitly test the overhead imposed on normal operation of standard
+socket calls such as \texttt{send}, \texttt{recv}, \texttt{connect},
+\texttt{accept}, and \texttt{bind} because the added overhead of \sesh on these
+calls outside of connection establishment and reconnection is minimal, involving
+only a few instructions.
 
 \section{Related Work}
 
 Providing ``mobile IP'' services is common in cell networks, since users are
 largely truly mobile and so need a built-in method to have changing IP addresses
-are part of the network design~\cite{ltemob,mobileip,Kurose}. While this largely
+as part of the network design~\cite{ltemob,mobileip,Kurose}. While this largely
 solves the problem for cell networks, it does not provide interoperability for
 cell-phones that reconnect to WiFi networks, which do not have the same
 functionality. This limitation is indicative of a larger limitation---the
-network must support the requirements of a mobile-IP infrastructure. This
+network must support the requirements of a mobile-IP infrastructure. This goes
 contrary to arguments in~\cite{Saltzer}, because it requires support through the
 whole stack. Furthermore, these solutions often require support by client
 applications and potentially servers (which may or may not understand the
@@ -411,7 +421,7 @@ Other projects and papers, such as Chandrashekar's Service Oriented
 Internet~\cite{chandrashekar2003service} and Saif's Service-Oriented Network
 Sockets~\cite{Saif} discuss designs for, essentially, session layer network designs.
 While \sesh would eventually provide more session-like features than
-simple reconnect and session tokens, that work is outside the scope of a class
+simple reconnect and session tokens, that work is outside the scope of this class
 project. However, much of the work in the aforementioned papers is extremely
 relevant to the future of a library such as \sesh.
 
@@ -419,7 +429,8 @@ A session layer protocol that explicitly provides reconnection is
 \textit{fived}~\cite{wasptr-15-01}. \textit{Fived} runs as a daemon on both
 endpoints, through which clients and servers can establish sessions.
 \textit{Fived} provides a number of services that \sesh does not yet,
-but should in the future, support, such as service enumeration. However,
+but should in the future, support, such as service enumeration and secure
+sessions. However,
 \textit{fived} incurs additional overhead by running as a daemon, whereas
 \sesh runs as libraries that interpose library calls, improving
 performance.
@@ -455,7 +466,7 @@ applications.
 While \sesh works at decoupling client identity from the client's address, it
 does not do the same for the server. An interesting future work could be to
 extend the above daemon idea with the ability to save a session (including token
-and temporary buffers) and move it to another machine, following a
+and temporary buffers) and move it to another machine, with a
 ``forwarding'' response when the client tries to use the old server address.
 
 A severe limitation of \sesh in its current form is support for \texttt{fork}ing
@@ -477,7 +488,8 @@ solution would be two-fold: use session-based encryption negotiated via either
 public/private key encryption (like ssh) or password-based tokens (like
 Kerberos). In any case, to perform the reconnection, the client and server
 should use challenge/response authentication to avoid sending the session token
-in the clear.
+in the clear. Finally, the random generation of a token should be improved to
+use stronger entropy sources.
 
 \section{Conclusion}
 
@@ -498,9 +510,9 @@ service on a machine can easily move to another through the use of sessions, we
 could flip load-balancing on its head. The service is automatically moved from
 higher-performance servers to lower-performance but more power-efficient servers
 when its load decreases, and can be automatically moved back when load
-increases. This is made much easier with sessions, because existing connections
+increases. While tricky today, this is made nearly trivial with sessions, because existing connections
 are trivially moved. Another implication is that of ``long-paused'' connections;
-that is, connections between two machines were one (or both) may sleep or
+that is, connections between two machines where one (or both) may sleep or
 power-down. When they resume, they may wish to resume what they were doing,
 including communicating with the other machine. An example could be a sensing
 device (or an IoT device) that powers down for a large amount of time, storing
@@ -509,7 +521,7 @@ session.
 
 No matter how its used, the idea is interesting. Greater support for network
 mobility in an environment that did not account for such a feature is
-interesting has has merit for future discussion and exploration.
+interesting and has merit for future discussion and exploration.
 
 
 
