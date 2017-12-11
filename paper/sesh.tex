@@ -30,6 +30,14 @@
 \newcommand{\sesh}{\texttt{sesh}\xspace}
 \newcommand{\Sesh}{\texttt{Sesh}\xspace}
 
+\makeatletter
+\renewcommand{\paragraph}{%
+  \@startsection{paragraph}{4}%
+  {\z@}{3.00ex \@plus 1ex \@minus .2ex}{-1em}%
+  {\normalfont\normalsize\bfseries}%
+}
+\makeatother
+
 \begin{document}
 \biolinum
 \maketitle
@@ -47,7 +55,8 @@ transparently allow a client and a server to reconnect a broken TCP connection
 after the client moves from one network to another. Such support is similar to
 previous discussions on session layers, but \sesh implements this functionality
 with absolutely no modifications to applications, without overhead on normal
-data transfer, and with minimal overhead in reestablishing connections. The
+data transfer, and with minimal overhead in reestablishing connections (<0.5ms
+for all operations, <50us for server-side session creation). The
 motivation for sessions in presented, along with the rationale for the design
 choices of \sesh, and along with a final discussion on some of the future work
 and implications of session support for applications and services in todays
@@ -56,7 +65,9 @@ networks.
 \begin{center}\noindent\rule{2cm}{0.4pt}\end{center}
 
 The source-code for \sesh, along with raw data and generation scripts,
-can be found at \url{https://github.com/dbittman/sesh}.
+can be found at \url{https://github.com/dbittman/sesh}. The README file contains
+useful information for navigating the code. It was tested in Linux x86-64;
+usability on other operating systems is unknown.
 
 \section{Introduction}
 
@@ -67,11 +78,11 @@ networking challenges were uncovered, researched, and solved. Among those
 problems is mobile IP services. Cell networks are designed with the knowledge
 that a particular device might move (sometimes quickly) around both physical
 space and the network, resulting in changing networks, IP address, and
-connectivity. Cell networks use mobile IP services to solve this problem,
+connectivity; therefore they use mobile IP services to solve this problem,
 allowing packets to be rerouted to new addresses (care-of)~\cite{Kurose,mobileip}.
-Unfortunately, these systems do not often interoperate
-with other networks, like when a cell user returns home, switches on WiFi, and
-connects to his/her internet service provider's network. The result is an
+Unfortunately, these systems often do not interoperate
+with other networks, like when a cell user returns home, turns on WiFi, and
+connects to their ISP's network. The result is an
 interruption in service, with applications that wish to switch to the new
 network needing to handle the switch manually, and servers experiencing dead TCP
 connections to clients, especially if the cell phone's operating system decides
@@ -237,8 +248,11 @@ shown graphically in figure~\ref{fig:recproc}. The operation does one thing:
 replace a single, dead, TCP connection with a new one without the real client or
 the real server noticing the change.
 
-\begin{figure}
+\begin{figure}[!htb]
+	%\begin{mdframed}
 	\centering
+		\setlength{\belowcaptionskip}{-10pt}
+		\hspace*{-5mm}
 	\includegraphics[width=80mm,height=127mm]{fig/reconn_diag}
 	\caption{The reconnection process. The client moves networks, causing its
 	address to change, which breaks the TCP connection. The client and server
@@ -249,6 +263,7 @@ the real server noticing the change.
 	no direct connection between ports and file descriptors and the diagram
 	should not be interpreted to mean that there is.}
 	\label{fig:recproc}
+	%\end{mdframed}
 \end{figure}
 
 Upon receiving the signal, the client opens a new connection to the session
@@ -275,7 +290,7 @@ The core functionality of reconnection is done by replacing the file descriptor
 that refers to the old TCP connection with one that refers to a new connection.
 This can be accomplished by the \texttt{dup2} systemcall, which duplicates a
 given file descriptor into another provided file descriptor, closing the target
-if it is open. This is exactly what we want, however there are some details.
+if it is open~\cite{dup}. This is exactly what we want, however there are some details.
 Firstly, this code must run in isolation. For the client, this is simple---it's
 already triggering reconnection by signal handling, so while it's handling
 the signal to interact with the session-server, we can also use \texttt{dup2} to
@@ -286,7 +301,7 @@ descriptor will be replaced and the client can continue normally.
 
 However, if the application was executing inside a system call, the default
 action is to return from the system call with \texttt{EINTR} (interrupted system
-call). This may be unexpected for applications, so we specify the
+call)~\cite{sigaction}. This may be unexpected for applications, so we specify the
 \texttt{SA\_RESTART} flag for the signal handler so that system calls are
 restarted instead. An added benefit of restarting system calls is that system
 calls that were started with the old, dead TCP connection will use the new TCP
@@ -357,7 +372,8 @@ represent 95\% confidence intervals.
 
 \begin{figure}[!htb]
 	\centering
-	\includegraphics[width=70mm]{fig/time_est}
+	\hspace*{-3mm}
+	\includegraphics[width=83mm]{fig/time_est}
 	\caption{Latency for establishing a TCP connection using \sesh. The time
 	represents the additional overhead of the session functionality over that of
 	a normal TCP connection establishment.}
@@ -378,7 +394,8 @@ it a tolerable overhead (especially since it is an uncommon operation).
 
 \begin{figure}[!htb]
 	\centering
-	\includegraphics[width=70mm]{fig/time_recon}
+	\hspace*{-3mm}
+	\includegraphics[width=83mm]{fig/time_recon}
 	\caption{Latency for reconnecting with a new TCP connection between a client
 	and a server with a previously established session.}
 	\label{fig:recon}
