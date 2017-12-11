@@ -46,17 +46,101 @@ can be found at \url{https://github.com/dbittman/sesh}.
 
 \section{Introduction}
 
-Mobile networking
+Over the past decade, mobile networking has exploded, driving the cell phone
+market wild while providing internet access to people far and wide in places
+they never imagined the internet could reach. In the process, a large number of
+networking challenges were uncovered, researched, and solved. Among those
+problems is mobile IP services. Cell networks are designed with the knowledge
+that a particular device might move (sometimes quickly) around both physical
+space and the network, resulting in changing networks, IP address, and
+connectivity. Cell networks use mobile IP services to solve this problem,
+allowing packets to be rerouted to new addresses (care-of,
+etc)~\cite{Kurose,mobileip}. Unfortunately, these systems do not often interoperate
+with other networks, like when a cell user returns home, switches on WiFi, and
+connects to his/her internet service provider's network. The result is an
+interruption in service, with applications that wish to switch to the new
+network needing to handle the switch manually, and servers experiencing dead TCP
+connections to clients, especially if the cell phone's operating system decides
+to kill the old connections.
 
-Cell phones use 2 different networks that dont interoperate
+We have all experienced this; switching to WiFi in a low-connectivity area often
+does not grant ``good'' internet access automatically for already running
+applications. The problems are even worse for laptop users, whose networking
+stacks are often not designed for changing networks despite that being
+incredibly common for laptop users.
 
-Implementing mobile IP is hard
+Unfortunately, the design of client/server applications that use connection-mode
+sockets somewhat precludes support for changing networks, as the connection is
+often \textit{defined} to include the network addresses. Furthermore,
+client/server applications often use these connection-mode sockets directly,
+bypassing the top levels of the OSI model because they were never really
+implemented. Instead, these applications work just fine using up to the
+transport layer before jumping directly to the application layer (or
+implementing a semi-replacement for the missing layers themselves). The result
+is a set of networking applications which do not support true ``sessions'', nor
+can they handle the client changing networks easily (unless they are designed to
+make a new connection for each interaction).
 
-Need something that does end-to-end
+A \textit{session layer} can solve some of these problems if it works by
+decoupling \textit{services} from ports and \textit{identity} from network
+address~\cite{wasptr-15-01,chandrashekar2003service}. \Sesh focuses on the second problem; it assigns TCP connections between
+clients and servers a unique \textit{session token}, which the client can later
+present to the server to reestablish a dead connection after changing networks.
+It does this by replacing the old, dead TCP connection between a client and a
+server with a new one, established after the network change. The result is that
+the client and the server can continue to communicate as they did before the
+network changed without having to explicitly handle the possibility of network
+changes. \Sesh provides two shared libraries (one for the client, one for the
+server) which can be loaded into a processes address space without it
+explicitly linking to it. The libraries interpose on certain system calls and
+library functions to run session management, creation, and reconnection in the
+background, completely transparent to both the client and the server.
 
-session daemons help, but require additional deployment
+\paragraph{Adoption---Rationale for Transparent Design}
+One of the problems that new technologies often have is adoption, especially in environments
+where existing entrenched designs require enormous and costly efforts to
+replace. A perfect example of this is WEP and WPA2. Even years after WEP was
+shown to be woefully insecure and WPA2 to be a \textit{hugely} superior
+technology, WEP still remained in many installations~\cite{bittau2006sp}. A more
+related example is IPv6 and its extremely slow deployment into existing network
+infrastructure. Although the technology and implementation was available, a
+shockingly large amount of network infrastructure remains outdated.
 
-\sesh is transparent and provides reconnection services
+Even if \sesh were a revolutionary technology~\footnote{It really isn't, let's
+be honest.}, it would have similarly slow adoption curves, as evidenced by prior
+attempts to change networking infrastructure. Because adoption of these
+technologies is inversely proportional to the amount of network hardware that
+needs to be updated, I posit that the only way to get \textit{reasonable}
+adoption of a session layer would be to follow the end-to-end
+principle~\cite{Saltzer} (which is a good idea anyway) and place the
+functionality at the end points: the client and the server. Existing work has
+been done on implementing session layers in such a way~\cite{wasptr-15-01}, but
+it runs as a daemon, having additional overhead and no transparency for
+applications since they need to interact with the daemon and speak its language.
+
+Although adoption rate is less affected by the need for applications to support
+a particular protocol, it still has an effect. Existing applications that could
+really benefit from such designs (file transfer, stateful web connections, ssh,
+etc) would need to be rewritten to use the new protocol. Instead, I designed
+\sesh to work transparently on an application, allowing \sesh to
+reestablish TCP connections for an application automatically without it noticing.
+
+\begin{center}\rule{2cm}{0.1pt}\end{center}
+
+This paper discusses the following: The design goals and design overview of
+\sesh, including some rationale on the choices made; the implementation details
+of implementing \sesh on a real Linux system; a set of benchmarks for connection
+establishment and reconnection services; and finally, a discussion on future
+directions for the work.
+
+Along with \sesh I developed a test multi-client and non-blocking echo server
+and client, which link to the \sesh shared libraries. These aided in development
+and debugging. Finally, \sesh was tested on two instances of netcat (one in
+listen mode, the other connecting to the first) by using \texttt{LD\_PRELOAD} to
+inject the shared libraries into the programs. The result was a connection
+between two instances of netcat that could be reconnected should the client move
+to a different network, which is precisely the goal of the project: support
+moving networks transparently to existing applications.
 
 \section{Design}
 
@@ -138,7 +222,7 @@ the real server noticing the change.
 
 \begin{figure}
 	\centering
-	\includegraphics[width=90mm]{fig/reconn_diag}
+	\includegraphics[width=80mm,height=131mm]{fig/reconn_diag}
 	\caption{The reconnection process. The client moves networks, causing its
 	address to change, which breaks the TCP connection. The client and server
 	negotiate a new connection via the session management port, which is then
