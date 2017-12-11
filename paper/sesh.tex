@@ -83,7 +83,8 @@ make a new connection for each interaction).
 
 A \textit{session layer} can solve some of these problems if it works by
 decoupling \textit{services} from ports and \textit{identity} from network
-address~\cite{wasptr-15-01,chandrashekar2003service}. \Sesh focuses on the second problem; it assigns TCP connections between
+address~\cite{wasptr-15-01,chandrashekar2003service}.
+\Sesh focuses on the second problem; it assigns TCP connections between
 clients and servers a unique \textit{session token}, which the client can later
 present to the server to reestablish a dead connection after changing networks.
 It does this by replacing the old, dead TCP connection between a client and a
@@ -410,18 +411,83 @@ these solutions lack the usability and transparency of true sessions.
 
 \section{Future Work}
 
-Mobile server
+\Sesh focused only on providing a reconnection service for dead TCP connections
+after network movement. However, it could be drastically extended to provide
+more features of a session layer. For example, a \sesh daemon could run on each
+machine in order to manage shared resources between all applications that use
+the \sesh library to combine all session management for different applications
+on a given machine into one process. Of course, the \sesh library would still be
+used to reconnect TCP connections and perform the actual establishment in order
+to not lose the performance of shared libraries over a daemon, but the presence
+of a daemon would allow multiple \sesh-enabled servers on one machine (which is
+currently not possible). It would also help support network changes while data
+is being sent, which could currently result in some data loss. Data is sent both
+across the network and also to the session server, which can keep its own TCP
+buffer in order to replay stored data into the new connection after a
+reconnection attempt. If applications are written to be aware of a \sesh daemon,
+it can provide services similar to that of \textit{fived}~\cite{wasptr-15-01},
+such as service discovery and multiplexing,
+while also providing improved performance and transparent support for legacy
+applications.
 
-Better security
+While \sesh works at decoupling client identity from the client's address, it
+does not do the same for the server. An interesting future work could be to
+extend the above daemon idea with the ability to save a session (including token
+and temporary buffers) and move it to another machine, following a
+``forwarding'' response when the client tries to use the old server address.
 
-forking servers
+A severe limitation of \sesh in its current form is support for \texttt{fork}ing
+servers. For example, \texttt{ssh} cannot be imbued with session support right
+now because its management of file descriptors and processes is much more
+complex and it is out of the scope of a class project to support this. However,
+it is not outside the realm of possibility; the \sesh library would need to
+interpose on \texttt{fork} and \texttt{exec} to inject itself into a child's
+address space and continue to function there.
 
-service discovery
+Finally, the security of \sesh could stand to be improved. Currently, only the
+token is necessary to reestablish a connection. Future sessions could be
+protected by a login primitive which would only allow a session to reconnect
+after user identity is confirmed. Another problem is that the token is exchanged
+in the clear, meaning that man-in-the-middle attacks are possible to hijack
+sessions. All of these security problems are outside the scope of the class,
+considering the difficulty in engineering the basic proof-of-concept itself. A
+solution would be two-fold: use session-based encryption negotiated via either
+public/private key encryption (like ssh) or password-based tokens (like
+Kerberos). In any case, to perform the reconnection, the client and server
+should use challenge/response authentication to avoid sending the session token
+in the clear.
 
 \section{Conclusion}
 
+Networking technologies will never stop evolving, and will never stop
+encountering problems that need to be solved. Often these problems manifest as
+minor inconveniences for end users, but their solutions can often have
+significant impact for networking services and design in the future. Providing
+support for reconnections for TCP could make many services much more reliable,
+providing support for decoupled identity from addresses could allow much easier
+mobility of users across machines, and providing a unified method for
+establishing secure connections could change networking security drastically for
+the better.
 
+But it does not have to stop there; improving the mobility of
+endpoints in a communication could improve the way that data and services move
+about in large, complicated networking environments and data centers. If a
+service on a machine can easily move to another through the use of sessions, we
+could flip load-balancing on its head. The service is automatically moved from
+higher-performance servers to lower-performance but more power-efficient servers
+when its load decreases, and can be automatically moved back when load
+increases. This is made much easier with sessions, because existing connections
+are trivially moved. Another implication is that of ``long-paused'' connections;
+that is, connections between two machines were one (or both) may sleep or
+power-down. When they resume, they may wish to resume what they were doing,
+including communicating with the other machine. An example could be a sensing
+device (or an IoT device) that powers down for a large amount of time, storing
+session data in non-volatile memory, and then powers back on, resuming the
+session.
 
+No matter how its used, the idea is interesting. Greater support for network
+mobility in an environment that did not account for such a feature is
+interesting has has merit for future discussion and exploration.
 
 
 
