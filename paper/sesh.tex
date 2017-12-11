@@ -1,4 +1,4 @@
-\documentclass[twocolumn,10pt]{article}
+\documentclass[twocolumn,11pt]{article}
 \usepackage[margin=1in]{geometry}
 \usepackage[T1]{fontenc}
 \usepackage[sort,numbers]{natbib}
@@ -38,6 +38,20 @@
 
 \section*{Abstract}
 
+Network mobility and its interaction between networks that support the idea and
+networks that do not is a hard problem. Instead of looking at the implementation
+of such a feature directly in the network, this paper explores the idea of
+supporting \textit{reconnection} of connection-oriented sockets after a network
+change. The implementation, \sesh, is a pair of shared libraries that
+transparently allow a client and a server to reconnect a broken TCP connection
+after the client moves from one network to another. Such support is similar to
+previous discussions on session layers, but \sesh implements this functionality
+with absolutely no modifications to applications, without overhead on normal
+data transfer, and with minimal overhead in reestablishing connections. The
+motivation for sessions in presented, along with the rationale for the design
+choices of \sesh, and along with a final discussion on some of the future work
+and implications of session support for applications and services in todays
+networks.
 
 \begin{center}\noindent\rule{2cm}{0.4pt}\end{center}
 
@@ -223,7 +237,7 @@ the real server noticing the change.
 
 \begin{figure}
 	\centering
-	\includegraphics[width=80mm,height=131mm]{fig/reconn_diag}
+	\includegraphics[width=80mm,height=127mm]{fig/reconn_diag}
 	\caption{The reconnection process. The client moves networks, causing its
 	address to change, which breaks the TCP connection. The client and server
 	negotiate a new connection via the session management port, which is then
