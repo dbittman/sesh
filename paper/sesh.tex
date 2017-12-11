@@ -38,8 +38,8 @@
 
 \section*{Abstract}
 
-Network mobility and its interaction between networks that support the idea and
-networks that do not is a hard problem. Instead of looking at the implementation
+Network mobility, and its interaction between networks that support it and
+networks that do not, is a hard problem. Instead of looking at the implementation
 of such a feature directly in the network, this paper explores the idea of
 supporting \textit{reconnection} of connection-oriented sockets after a network
 change. The implementation, \sesh, is a pair of shared libraries that
@@ -68,8 +68,8 @@ problems is mobile IP services. Cell networks are designed with the knowledge
 that a particular device might move (sometimes quickly) around both physical
 space and the network, resulting in changing networks, IP address, and
 connectivity. Cell networks use mobile IP services to solve this problem,
-allowing packets to be rerouted to new addresses (care-of,
-etc)~\cite{Kurose,mobileip}. Unfortunately, these systems do not often interoperate
+allowing packets to be rerouted to new addresses (care-of)~\cite{Kurose,mobileip}.
+Unfortunately, these systems do not often interoperate
 with other networks, like when a cell user returns home, switches on WiFi, and
 connects to his/her internet service provider's network. The result is an
 interruption in service, with applications that wish to switch to the new
@@ -80,7 +80,7 @@ to kill the old connections.
 We have all experienced this; switching to WiFi in a low-connectivity area often
 does not grant ``good'' internet access automatically for already running
 applications. The problems are even worse for laptop users, whose networking
-stacks are often not designed for changing networks despite that being
+stacks are often not designed for changing networks despite such movement being
 incredibly common for laptop users.
 
 Unfortunately, the design of client/server applications that use connection-mode
@@ -118,7 +118,7 @@ replace. A perfect example of this is WEP and WPA2. Even years after WEP was
 shown to be woefully insecure and WPA2 to be a \textit{hugely} superior
 technology, WEP still remained in many installations~\cite{bittau2006sp}. A more
 related example is IPv6 and its extremely slow deployment into existing network
-infrastructure. Although the technology and implementation was available, a
+infrastructure. Although the technology and implementation is available, a
 shockingly large amount of network infrastructure remains outdated.
 
 Even if \sesh were a revolutionary technology~\footnote{It really isn't, let's
@@ -162,7 +162,7 @@ moving networks transparently to existing applications.
 The model we choose for \sesh is \textit{mobile-client, stationary-server}---the
 client is allowed to move arbitrarily, where move means change networks, IP
 addresses, etc. The server, however, maintains a constant location (IP address).
-And load-balancing that happens for servers must occur before the use of \sesh,
+Any load-balancing that happens for servers must occur before the use of \sesh,
 since it cannot handle moving sessions across machines.
 
 The core design choice for \sesh was to keep it as transparent as possible and
@@ -187,12 +187,12 @@ application code for the client and the server is referred to as the real client
 and real server.
 
 \paragraph{Server Operation}
-When the server begins, the \serverso initialization code creates a new TCP
+When the server starts up, the \serverso initialization code creates a new TCP
 server on the \textit{session management port}. This port is used by clients to
 send commands and interact with the session services.
 When a client asks to
 establish a new session, they send a \texttt{SESSION ESTABLISH} packet to the
-sessions management port. The server then generates a session token (32-bytes of
+session management port. The server then generates a session token (32-bytes of
 random characters) which it sends back to the client. When the client (the real
 client, not the interposed code in \clientso) connects to the server (the real
 server port, not the session management port), the session token is first
@@ -215,14 +215,16 @@ servers that do not support the session functionality). Once connected, the
 session-client sends the \texttt{SESSION ESTABLISH} packet and receives a
 session token in return, which it records. The \texttt{connect} call then proceeds as
 normal. After the connection is established between the real client and the real
-server, the session-client code exchanges the session token before
+server, the session-client code sends the session token to the server over the
+new connection to register it with the session before
 \texttt{connect} returns, finalizing the session establishment.
 
 
 \paragraph{Reconnection Operation}
 To trigger a reconnection attempt, the user sends the \texttt{SIGUSR2} signal to
-the client. The method for sending this signal is unspecified by \sesh, since it
-is out of scope to generate reconnection attempts automatically. The signal can
+the client. The method for sending this signal is unspecified by \sesh, since
+methods for triggering regeneration attempts is out of the scope of this
+project. The signal can
 either be sent manually, or another daemon on the machine could monitor the
 system for network changes, and send the signal to registered clients
 automatically.
@@ -242,7 +244,10 @@ the real server noticing the change.
 	address to change, which breaks the TCP connection. The client and server
 	negotiate a new connection via the session management port, which is then
 	used to replace the old connection file descriptors, allowing transparent
-	reconnection.}
+	reconnection. The two lines of text in the server's box represents logically
+	what a given file descriptor is used for in the server; obviously there is
+	no direct connection between ports and file descriptors and the diagram
+	should not be interpreted to mean that there is.}
 	\label{fig:recproc}
 \end{figure}
 
@@ -283,7 +288,10 @@ However, if the application was executing inside a system call, the default
 action is to return from the system call with \texttt{EINTR} (interrupted system
 call). This may be unexpected for applications, so we specify the
 \texttt{SA\_RESTART} flag for the signal handler to that system calls are
-restarted instead.
+restarted instead. An added benefit of restarting system calls is that system
+calls that were started with the old, dead TCP connection will use the new TCP
+connection. This is because the file descriptor \textit{number} has not changed,
+only the underlying file description object in the kernel.
 
 
 \paragraph{Server Session Support}
