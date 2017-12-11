@@ -15,7 +15,13 @@
 \usepackage{mdframed}
 \usepackage[format=plain,labelfont={bf,it},textfont=it]{caption}
 \usepackage[breaklinks]{hyperref}
-
+\usepackage{fancyhdr}
+ 
+\pagestyle{fancy}
+\fancyhf{}
+\cfoot{\thepage}
+\rfoot{\scriptsize Daniel Bittman (dbittman)\\CMPE252A Final Project Paper}
+\renewcommand{\headrulewidth}{0pt}
 \author{Daniel Bittman \\ dbittman@ucsc.edu}
 
 \setlength{\columnsep}{7mm}
